@@ -1,6 +1,6 @@
 import logging as log
 from dotenv import dotenv_values
-import merge
+import os
 from merge.client import Merge
 from merge.core.api_error import ApiError
 from merge.resources.filestorage.types import PaginatedFileList
@@ -13,6 +13,23 @@ from merge.resources.filestorage.types.file_storage_file_response import (
 
 def load_dirs() -> list[str]:
     return ["/Users/dylan/Documents/relfection-backup"]
+
+
+def verify_local_dirs_exist(dir: str):
+    if not os.path.exists(dir):
+        log.error(f"Directory {dir} does not exist!")
+        exit(1)
+
+
+def create_drive_merge_client() -> Merge:
+    env_vars = dotenv_values(".env")
+    merge_client = Merge(
+        api_key=env_vars["API_KEY"], account_token=env_vars["DRIVE_ACCOUNT_TOKEN"]
+    )
+    log.getLogger("httpx").setLevel(log.WARNING)
+    log.getLogger("httpcore.http11").setLevel(log.WARNING)
+    log.getLogger("httpcore.connection").setLevel(log.WARNING)
+    return merge_client
 
 
 def verify_account_link(merge_client: Merge):
@@ -29,6 +46,8 @@ def create_backup_folder_if_not_exists(merge_client: Merge):
         ).results
     except ApiError as e:
         log.error(e.body)
+        log.error("Failed to get list of folders!")
+        exit(1)
 
     if not any(folder.name == "reflection-backup" for folder in folder_list):
         try:
@@ -54,17 +73,12 @@ def main():
     )
     for dir in dirs:
         log.debug(dir)
-    log.debug("\nReflection will now begin backing up your files...")
-    env_vars = dotenv_values(".env")
-    merge_client = Merge(
-        api_key=env_vars["API_KEY"], account_token=env_vars["ACCOUNT_TOKEN"]
-    )
-    log.getLogger("httpx").setLevel(log.WARNING)
-    log.getLogger("httpcore.http11").setLevel(log.WARNING)
-    log.getLogger("httpcore.connection").setLevel(log.WARNING)
+        verify_local_dirs_exist(dir)
 
-    verify_account_link(merge_client)
-    create_backup_folder_if_not_exists(merge_client)
+    log.debug("\nReflection will now begin backing up your files...")
+    drive_merge_client = create_drive_merge_client()
+    verify_account_link(drive_merge_client)
+    create_backup_folder_if_not_exists(drive_merge_client)
 
     # files: PaginatedFileList = merge_client.filestorage.files.list()
     # log.debug(files.json())
